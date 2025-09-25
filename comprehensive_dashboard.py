@@ -71,9 +71,9 @@ def create_comprehensive_dummy_data():
     # Create comprehensive dataset with monthly data for 2 years
     comprehensive_data = []
     
-    # Generate data for each month from 2022 to 2024
-    start_date = datetime(2022, 1, 1)
-    end_date = datetime(2024, 12, 31)
+    # Generate data for each month from 2024 to 2025
+    start_date = datetime(2024, 1, 1)
+    end_date = datetime(2025, 12, 31)
     
     current_date = start_date
     while current_date <= end_date:
@@ -96,17 +96,44 @@ def create_comprehensive_dummy_data():
             
             # Add some random variation
             random_factor = np.random.uniform(0.9, 1.1)
-            total_factor = seasonal_factor * random_factor
+            
+            # Add growth factor for 2025 (extrapolation)
+            if year == 2025:
+                # Assume 5-15% growth for 2025 based on market trends
+                growth_factor = np.random.uniform(1.05, 1.15)
+            else:
+                growth_factor = 1.0
+            
+            total_factor = seasonal_factor * random_factor * growth_factor
             
             adjusted_sales_min = int(base_sales_min * total_factor)
             adjusted_sales_max = int(base_sales_max * total_factor)
+            
+            # Add price variation between years
+            base_price = row[4]  # Original price range
+            if year == 2025:
+                # Extract price range and apply inflation/growth
+                price_min_str = base_price.split('-')[0].replace('$', '').replace(',', '').strip()
+                price_max_str = base_price.split('-')[1].replace('$', '').replace(',', '').replace('+', '').strip()
+                
+                price_min = float(price_min_str)
+                price_max = float(price_max_str)
+                
+                # Apply 3-8% price increase for 2025
+                price_inflation = np.random.uniform(1.03, 1.08)
+                adjusted_price_min = int(price_min * price_inflation)
+                adjusted_price_max = int(price_max * price_inflation)
+                
+                adjusted_price = f"${adjusted_price_min:,} - ${adjusted_price_max:,}"
+            else:
+                adjusted_price = base_price
             
             comprehensive_data.append([
                 row[0],  # Manufacturer Name
                 row[1],  # Brand Name
                 row[2],  # Model Name
                 row[3],  # HP Segment
-                row[4],  # Dollar Value
+                adjusted_price,  # Dollar Value (adjusted for year)
                 f"{adjusted_sales_min}-{adjusted_sales_max}",  # Monthly Sales
                 row[6],  # Imported From
                 row[7],  # End Destination Country
@@ -153,8 +180,8 @@ def create_comprehensive_dummy_data():
     # Create categories for better filtering
     df['HP_Category'] = pd.cut(df['HP_Min'], 
                               bins=[0, 30, 60, 100, 200, 500, 1000], 
-                              labels=['Compact (0-30 HP)', 'Mid-Range (30-60 HP)', 'Standard (60-100 HP)', 
-                                     'Heavy Duty (100-200 HP)', 'High Performance (200-500 HP)', 'Ultra High (500+ HP)'])
+                              labels=['0-30 HP', '30-60 HP', '60-100 HP', 
+                                     '100-200 HP', '200-500 HP', '500+ HP'])
     
     df['Price_Category'] = pd.cut(df['Price_Min'], 
                                  bins=[0, 20000, 50000, 100000, 200000, 500000, 1000000], 
@@ -176,9 +203,6 @@ manufacturers = sorted(df['Manufacturer Name'].unique())
 brands = sorted(df['Brand Name'].unique())
 models = sorted(df['Model Name'].unique())
 hp_segments = sorted(df['HP Segment'].unique())
-hp_categories = sorted(df['HP_Category'].dropna().unique())
-price_categories = sorted(df['Price_Category'].dropna().unique())
-sales_categories = sorted(df['Sales_Category'].dropna().unique())
 import_countries = sorted(df['Imported From (Country Name)'].unique())
 destination_countries = sorted(df['End Destination Country'].unique())
 months = sorted(df['Month'].unique())
@@ -238,7 +262,7 @@ app.layout = dbc.Container([
                             )
                         ], width=3),
                         dbc.Col([
-                            html.Label("Brand:", className="fw-bold"),
+                            html.Label("Brand/Series Name:", className="fw-bold"),
                             dcc.Dropdown(
                                 id='brand-filter',
                                 options=[{'label': 'All Brands', 'value': 'All'}],
@@ -273,28 +297,6 @@ app.layout = dbc.Container([
                     # Second row of filters
                     dbc.Row([
                         dbc.Col([
-                            html.Label("Price Category:", className="fw-bold"),
-                            dcc.Dropdown(
-                                id='price-category-filter',
-                                options=[{'label': 'All Price Categories', 'value': 'All'}] + 
-                                        [{'label': p, 'value': p} for p in price_categories],
-                                value='All',
-                                clearable=False,
-                                className="mb-3"
-                            )
-                        ], width=3),
-                        dbc.Col([
-                            html.Label("Sales Category:", className="fw-bold"),
-                            dcc.Dropdown(
-                                id='sales-category-filter',
-                                options=[{'label': 'All Sales Categories', 'value': 'All'}] + 
-                                        [{'label': s, 'value': s} for s in sales_categories],
-                                value='All',
-                                clearable=False,
-                                className="mb-3"
-                            )
-                        ], width=3),
-                        dbc.Col([
                             html.Label("Imported From:", className="fw-bold"),
                             dcc.Dropdown(
                                 id='import-country-filter',
@@ -304,22 +306,18 @@ app.layout = dbc.Container([
                                 clearable=False,
                                 className="mb-3"
                             )
-                        ], width=3),
+                        ], width=4),
                         dbc.Col([
-                            html.Label("Destination Country:", className="fw-bold"),
+                            html.Label("End Destination Country:", className="fw-bold"),
                             dcc.Dropdown(
                                 id='destination-country-filter',
-                                options=[{'label': 'All Destination Countries', 'value': 'All'}] + 
+                                options=[{'label': 'End Destination Countries', 'value': 'All'}] + 
                                         [{'label': c, 'value': c} for c in destination_countries],
                                 value='All',
                                 clearable=False,
                                 className="mb-3"
                             )
-                        ], width=3)
-                    ]),
-                    
-                    # Third row - Time filters and Range sliders
-                    dbc.Row([
+                        ], width=4),
                         dbc.Col([
                             html.Label("Year:", className="fw-bold"),
                             dcc.Dropdown(
@@ -336,36 +334,12 @@ app.layout = dbc.Container([
                             dcc.Dropdown(
                                 id='month-filter',
                                 options=[{'label': 'All Months', 'value': 'All'}] + 
-                                        [{'label': f"{m:02d}", 'value': m} for m in months],
+                                        [{'label': datetime(2024, m, 1).strftime('%B'), 'value': m} for m in months],
                                 value='All',
                                 clearable=False,
                                 className="mb-3"
                             )
-                        ], width=2),
-                        dbc.Col([
-                            html.Label("Price Range (US$):", className="fw-bold"),
-                            dcc.RangeSlider(
-                                id='price-range-slider',
-                                min=int(df['Price_Min'].min()),
-                                max=int(df['Price_Max'].max()),
-                                value=[int(df['Price_Min'].min()), int(df['Price_Max'].max())],
-                                marks={int(i): f'${i:,.0f}' for i in range(int(df['Price_Min'].min()), int(df['Price_Max'].max()) + 1, 50000)},
-                                tooltip={"placement": "bottom", "always_visible": True},
-                                className="mb-3"
-                            )
-                        ], width=4),
-                        dbc.Col([
-                            html.Label("Sales Range (Units):", className="fw-bold"),
-                            dcc.RangeSlider(
-                                id='sales-range-slider',
-                                min=int(df['Sales_Min'].min()),
-                                max=int(df['Sales_Max'].max()),
-                                value=[int(df['Sales_Min'].min()), int(df['Sales_Max'].max())],
-                                marks={int(i): f'{i:,.0f}' for i in range(int(df['Sales_Min'].min()), int(df['Sales_Max'].max()) + 1, 100)},
-                                tooltip={"placement": "bottom", "always_visible": True},
-                                className="mb-3"
-                            )
-                        ], width=4)
+                        ], width=2)
                     ])
                 ])
             ], className="shadow-sm mb-4")
@@ -476,23 +450,18 @@ def update_model_dropdown(selected_manufacturer, selected_brand):
      Input("brand-filter", "value"),
      Input("model-filter", "value"),
      Input("hp-segment-filter", "value"),
-     Input("price-category-filter", "value"),
-     Input("sales-category-filter", "value"),
      Input("import-country-filter", "value"),
      Input("destination-country-filter", "value"),
      Input("year-filter", "value"),
-     Input("month-filter", "value"),
-     Input("price-range-slider", "value"),
-     Input("sales-range-slider", "value")]
+     Input("month-filter", "value")]
 )
-def update_summary_cards(manufacturer, brand, model, hp_segment, price_category, sales_category, 
-                        import_country, destination_country, year, month, price_range, sales_range):
+def update_summary_cards(manufacturer, brand, model, hp_segment, 
+                        import_country, destination_country, year, month):
     """Update summary cards based on filter selections"""
     
     # Apply filters
-    filtered_df = apply_filters(df, manufacturer, brand, model, hp_segment, price_category, 
-                              sales_category, import_country, destination_country, year, month, 
-                              price_range, sales_range)
+    filtered_df = apply_filters(df, manufacturer, brand, model, hp_segment, 
+                              import_country, destination_country, year, month)
     
     if filtered_df.empty:
         return html.Div([
@@ -514,16 +483,6 @@ def update_summary_cards(manufacturer, brand, model, hp_segment, price_category,
         dbc.Card([
             dbc.CardBody([
                 html.Div([
-                    html.I(className="fas fa-database fa-2x text-primary mb-3"),
-                    html.H4(f"{total_records:,}", className="text-primary mb-2"),
-                    html.P("Total Records", className="mb-0 text-muted")
-                ], className="text-center")
-            ])
-        ], className="text-center shadow-sm border-0", style={"border-radius": "15px"}),
-        
-        dbc.Card([
-            dbc.CardBody([
-                html.Div([
                     html.I(className="fas fa-industry fa-2x text-success mb-3"),
                     html.H4(f"{unique_manufacturers}", className="text-success mb-2"),
                     html.P("Manufacturers", className="mb-0 text-muted")
@@ -536,7 +495,7 @@ def update_summary_cards(manufacturer, brand, model, hp_segment, price_category,
                 html.Div([
                     html.I(className="fas fa-tractor fa-2x text-info mb-3"),
                     html.H4(f"{unique_models}", className="text-info mb-2"),
-                    html.P("Unique Models", className="mb-0 text-muted")
+                    html.P("Tractor Models", className="mb-0 text-muted")
                 ], className="text-center")
             ])
         ], className="text-center shadow-sm border-0", style={"border-radius": "15px"}),
@@ -556,24 +515,14 @@ def update_summary_cards(manufacturer, brand, model, hp_segment, price_category,
                 html.Div([
                     html.I(className="fas fa-chart-line fa-2x text-danger mb-3"),
                     html.H4(f"{avg_sales_min:,.0f} - {avg_sales_max:,.0f}", className="text-danger mb-2"),
-                    html.P("Avg Monthly Sales", className="mb-0 text-muted")
-                ], className="text-center")
-            ])
-        ], className="text-center shadow-sm border-0", style={"border-radius": "15px"}),
-        
-        dbc.Card([
-            dbc.CardBody([
-                html.Div([
-                    html.I(className="fas fa-shopping-cart fa-2x text-secondary mb-3"),
-                    html.H4(f"{total_sales_min:,.0f} - {total_sales_max:,.0f}", className="text-secondary mb-2"),
-                    html.P("Total Sales Range", className="mb-0 text-muted")
+                    html.P("Avg Tractor Unit Monthly Sales", className="mb-0 text-muted")
                 ], className="text-center")
             ])
         ], className="text-center shadow-sm border-0", style={"border-radius": "15px"})
     ]
     
     return dbc.Row([
-        dbc.Col(card, width=2, className="mb-3") for card in cards
+        dbc.Col(card, width=3, className="mb-3") for card in cards
     ], justify="center")
 
 # Callback to update charts
@@ -583,23 +532,18 @@ def update_summary_cards(manufacturer, brand, model, hp_segment, price_category,
      Input("brand-filter", "value"),
      Input("model-filter", "value"),
      Input("hp-segment-filter", "value"),
-     Input("price-category-filter", "value"),
-     Input("sales-category-filter", "value"),
      Input("import-country-filter", "value"),
      Input("destination-country-filter", "value"),
      Input("year-filter", "value"),
-     Input("month-filter", "value"),
-     Input("price-range-slider", "value"),
-     Input("sales-range-slider", "value")]
+     Input("month-filter", "value")]
 )
-def update_charts(manufacturer, brand, model, hp_segment, price_category, sales_category, 
-                 import_country, destination_country, year, month, price_range, sales_range):
+def update_charts(manufacturer, brand, model, hp_segment, 
+                 import_country, destination_country, year, month):
     """Update charts based on filter selections"""
     
     # Apply filters
-    filtered_df = apply_filters(df, manufacturer, brand, model, hp_segment, price_category, 
-                              sales_category, import_country, destination_country, year, month, 
-                              price_range, sales_range)
+    filtered_df = apply_filters(df, manufacturer, brand, model, hp_segment, 
+                              import_country, destination_country, year, month)
     
     if filtered_df.empty:
         return html.Div([
@@ -608,23 +552,96 @@ def update_charts(manufacturer, brand, model, hp_segment, price_category, sales_
     
     charts = []
     
-    # 1. Time Series Chart - Sales over time
-    time_series_data = filtered_df.groupby(['Date', 'Manufacturer Name'])['Sales_Min'].sum().reset_index()
-    fig_time = px.line(
-        time_series_data,
-        x='Date',
-        y='Sales_Min',
-        color='Manufacturer Name',
-        title="Monthly Sales Trends by Manufacturer",
-        labels={'Sales_Min': 'Monthly Sales (Units)', 'Date': 'Date'},
-        template="plotly_white"
-    )
+    # 1. Monthly Sales Chart - Sales by month
+    monthly_data = filtered_df.groupby(['Month', 'Manufacturer Name'])['Sales_Min'].sum().reset_index()
+    # Convert month numbers to month names
+    monthly_data['Month_Name'] = monthly_data['Month'].apply(lambda x: datetime(2024, x, 1).strftime('%B'))
+    
+    # Handle month filtering logic
+    if month == 'All':
+        # Show all months - ensure we have data for all months
+        all_months = list(range(1, 13))
+        manufacturers = monthly_data['Manufacturer Name'].unique()
+        complete_data = []
+        
+        for manufacturer in manufacturers:
+            manufacturer_data = monthly_data[monthly_data['Manufacturer Name'] == manufacturer]
+            for m in all_months:
+                month_name = datetime(2024, m, 1).strftime('%B')
+                existing_data = manufacturer_data[manufacturer_data['Month'] == m]
+                if len(existing_data) > 0:
+                    complete_data.append({
+                        'Month': m,
+                        'Manufacturer Name': manufacturer,
+                        'Sales_Min': existing_data['Sales_Min'].iloc[0],
+                        'Month_Name': month_name
+                    })
+                else:
+                    # Add zero sales for missing months
+                    complete_data.append({
+                        'Month': m,
+                        'Manufacturer Name': manufacturer,
+                        'Sales_Min': 0,
+                        'Month_Name': month_name
+                    })
+        
+        monthly_data = pd.DataFrame(complete_data)
+    else:
+        # Show only the selected month - filter the data to show only that month
+        selected_month = int(month)
+        monthly_data = monthly_data[monthly_data['Month'] == selected_month]
+        
+        # If no data for the selected month, create empty data structure
+        if monthly_data.empty:
+            manufacturers = filtered_df['Manufacturer Name'].unique()
+            month_name = datetime(2024, selected_month, 1).strftime('%B')
+            monthly_data = pd.DataFrame([{
+                'Month': selected_month,
+                'Manufacturer Name': manufacturer,
+                'Sales_Min': 0,
+                'Month_Name': month_name
+            } for manufacturer in manufacturers])
+    
+    # Determine chart type, title and configuration based on month filter
+    if month == 'All':
+        chart_title = "Monthly Tractor Sales (in units)"
+        xaxis_config = {'categoryorder': 'array', 'categoryarray': ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']}
+        
+        # Create line chart for all months
+        fig_time = px.line(
+            monthly_data,
+            x='Month_Name',
+            y='Sales_Min',
+            color='Manufacturer Name',
+            title=chart_title,
+            labels={'Sales_Min': 'Monthly Tractor Sales Volume (in units)', 'Month_Name': 'Month'},
+            template="plotly_white"
+        )
+    else:
+        selected_month_name = datetime(2024, int(month), 1).strftime('%B')
+        chart_title = f"Sales by Manufacturer - {selected_month_name}"
+        
+        # Create bar chart for specific month - show manufacturers on x-axis
+        fig_time = px.bar(
+            monthly_data,
+            x='Manufacturer Name',
+            y='Sales_Min',
+            color='Manufacturer Name',
+            title=chart_title,
+            labels={'Sales_Min': f'Tractor Sales Volume in {selected_month_name} (units)', 'Manufacturer Name': 'Manufacturer'},
+            template="plotly_white"
+        )
+        xaxis_config = {}
+    
     fig_time.update_layout(
         height=400,
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(size=12),
-        title_font_size=16
+        font=dict(size=10),
+        title_font_size=16,
+        xaxis=dict(**xaxis_config, tickfont=dict(size=9)),
+        yaxis=dict(tickfont=dict(size=9)),
+        showlegend=True if month == 'All' else False  # Hide legend for single month bar chart
     )
     charts.append(dcc.Graph(figure=fig_time, className="shadow-sm"))
     
@@ -637,7 +654,7 @@ def update_charts(manufacturer, brand, model, hp_segment, price_category, sales_
         color='Manufacturer Name',
         hover_name='Model Name',
         hover_data=['Brand Name', 'Price_Max', 'Sales_Max'],
-        title="Price vs Horsepower Analysis",
+        title="Tractor Price vs Tractor Horsepower Analysis",
         labels={'HP_Min': 'Horsepower (HP)', 'Price_Min': 'Price (US$)'},
         template="plotly_white"
     )
@@ -645,8 +662,10 @@ def update_charts(manufacturer, brand, model, hp_segment, price_category, sales_
         height=400,
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(size=12),
-        title_font_size=16
+        font=dict(size=10),
+        title_font_size=16,
+        xaxis=dict(tickfont=dict(size=9)),
+        yaxis=dict(tickfont=dict(size=9))
     )
     charts.append(dcc.Graph(figure=fig_price_hp, className="shadow-sm"))
     
@@ -655,14 +674,14 @@ def update_charts(manufacturer, brand, model, hp_segment, price_category, sales_
     fig_manufacturer = px.pie(
         values=manufacturer_sales.values,
         names=manufacturer_sales.index,
-        title="Market Share by Manufacturer (Total Sales)",
+        title="Market Share by Tractor Manufacturers (Units, Percentage)",
         template="plotly_white"
     )
     fig_manufacturer.update_layout(
         height=400,
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(size=12),
+        font=dict(size=10),
         title_font_size=16
     )
     charts.append(dcc.Graph(figure=fig_manufacturer, className="shadow-sm"))
@@ -673,7 +692,7 @@ def update_charts(manufacturer, brand, model, hp_segment, price_category, sales_
         x=hp_category_counts.index,
         y=hp_category_counts.values,
         title="Distribution by HP Category",
-        labels={'x': 'HP Category', 'y': 'Number of Records'},
+        labels={'x': 'HP Category', 'y': 'Number of Tractor Sold (Unit)'},
         template="plotly_white"
     )
     fig_hp_category.update_layout(
@@ -681,46 +700,12 @@ def update_charts(manufacturer, brand, model, hp_segment, price_category, sales_
         xaxis_tickangle=-45,
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(size=12),
-        title_font_size=16
+        font=dict(size=10),
+        title_font_size=16,
+        xaxis=dict(tickfont=dict(size=9)),
+        yaxis=dict(tickfont=dict(size=9))
     )
     charts.append(dcc.Graph(figure=fig_hp_category, className="shadow-sm"))
-    
-    # 5. Trade Flow Analysis
-    trade_flow = filtered_df.groupby(['Imported From (Country Name)', 'End Destination Country']).size().reset_index(name='Count')
-    fig_trade = px.sunburst(
-        trade_flow,
-        path=['Imported From (Country Name)', 'End Destination Country'],
-        values='Count',
-        title="Trade Flow Analysis",
-        template="plotly_white"
-    )
-    fig_trade.update_layout(
-        height=400,
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(size=12),
-        title_font_size=16
-    )
-    charts.append(dcc.Graph(figure=fig_trade, className="shadow-sm"))
-    
-    # 6. Price Distribution Histogram
-    fig_price_dist = px.histogram(
-        filtered_df,
-        x='Price_Min',
-        nbins=20,
-        title="Price Distribution",
-        labels={'Price_Min': 'Price (US$)', 'count': 'Number of Records'},
-        template="plotly_white"
-    )
-    fig_price_dist.update_layout(
-        height=400,
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(size=12),
-        title_font_size=16
-    )
-    charts.append(dcc.Graph(figure=fig_price_dist, className="shadow-sm"))
     
     return dbc.Row([
         dbc.Col(chart, width=6, className="mb-4") for chart in charts
@@ -733,23 +718,18 @@ def update_charts(manufacturer, brand, model, hp_segment, price_category, sales_
      Input("brand-filter", "value"),
      Input("model-filter", "value"),
      Input("hp-segment-filter", "value"),
-     Input("price-category-filter", "value"),
-     Input("sales-category-filter", "value"),
      Input("import-country-filter", "value"),
      Input("destination-country-filter", "value"),
      Input("year-filter", "value"),
-     Input("month-filter", "value"),
-     Input("price-range-slider", "value"),
-     Input("sales-range-slider", "value")]
+     Input("month-filter", "value")]
 )
-def update_data_table(manufacturer, brand, model, hp_segment, price_category, sales_category, 
-                      import_country, destination_country, year, month, price_range, sales_range):
+def update_data_table(manufacturer, brand, model, hp_segment, 
+                      import_country, destination_country, year, month):
     """Update data table based on filter selections"""
     
     # Apply filters
-    filtered_df = apply_filters(df, manufacturer, brand, model, hp_segment, price_category, 
-                              sales_category, import_country, destination_country, year, month, 
-                              price_range, sales_range)
+    filtered_df = apply_filters(df, manufacturer, brand, model, hp_segment, 
+                              import_country, destination_country, year, month)
     
     if filtered_df.empty:
         return html.Div([
@@ -803,23 +783,18 @@ def update_data_table(manufacturer, brand, model, hp_segment, price_category, sa
      Input("brand-filter", "value"),
      Input("model-filter", "value"),
      Input("hp-segment-filter", "value"),
-     Input("price-category-filter", "value"),
-     Input("sales-category-filter", "value"),
      Input("import-country-filter", "value"),
      Input("destination-country-filter", "value"),
      Input("year-filter", "value"),
-     Input("month-filter", "value"),
-     Input("price-range-slider", "value"),
-     Input("sales-range-slider", "value")]
+     Input("month-filter", "value")]
 )
-def download_csv(n_clicks, manufacturer, brand, model, hp_segment, price_category, sales_category, 
-                import_country, destination_country, year, month, price_range, sales_range):
+def download_csv(n_clicks, manufacturer, brand, model, hp_segment, 
+                import_country, destination_country, year, month):
     """Handle CSV download"""
     if n_clicks:
         # Apply filters
-        filtered_df = apply_filters(df, manufacturer, brand, model, hp_segment, price_category, 
-                                  sales_category, import_country, destination_country, year, month, 
-                                  price_range, sales_range)
+        filtered_df = apply_filters(df, manufacturer, brand, model, hp_segment, 
+                                  import_country, destination_country, year, month)
         
         # Convert to CSV
         csv_string = filtered_df.to_csv(index=False)
@@ -839,23 +814,18 @@ def download_csv(n_clicks, manufacturer, brand, model, hp_segment, price_categor
      Input("brand-filter", "value"),
      Input("model-filter", "value"),
      Input("hp-segment-filter", "value"),
-     Input("price-category-filter", "value"),
-     Input("sales-category-filter", "value"),
      Input("import-country-filter", "value"),
      Input("destination-country-filter", "value"),
      Input("year-filter", "value"),
-     Input("month-filter", "value"),
-     Input("price-range-slider", "value"),
-     Input("sales-range-slider", "value")]
+     Input("month-filter", "value")]
 )
-def download_excel(n_clicks, manufacturer, brand, model, hp_segment, price_category, sales_category, 
-                  import_country, destination_country, year, month, price_range, sales_range):
+def download_excel(n_clicks, manufacturer, brand, model, hp_segment, 
+                  import_country, destination_country, year, month):
     """Handle Excel download"""
     if n_clicks:
         # Apply filters
-        filtered_df = apply_filters(df, manufacturer, brand, model, hp_segment, price_category, 
-                                  sales_category, import_country, destination_country, year, month, 
-                                  price_range, sales_range)
+        filtered_df = apply_filters(df, manufacturer, brand, model, hp_segment, 
+                                  import_country, destination_country, year, month)
         
         # Convert to Excel
         output = io.BytesIO()
@@ -871,8 +841,8 @@ def download_excel(n_clicks, manufacturer, brand, model, hp_segment, price_categ
         )
     return ""
 
-def apply_filters(df, manufacturer, brand, model, hp_segment, price_category, sales_category, 
-                 import_country, destination_country, year, month, price_range, sales_range):
+def apply_filters(df, manufacturer, brand, model, hp_segment, 
+                 import_country, destination_country, year, month):
     """Apply all filters to the dataframe"""
     filtered_df = df.copy()
     
@@ -884,10 +854,6 @@ def apply_filters(df, manufacturer, brand, model, hp_segment, price_category, sa
         filtered_df = filtered_df[filtered_df['Model Name'] == model]
     if hp_segment != 'All':
         filtered_df = filtered_df[filtered_df['HP Segment'] == hp_segment]
-    if price_category != 'All':
-        filtered_df = filtered_df[filtered_df['Price_Category'] == price_category]
-    if sales_category != 'All':
-        filtered_df = filtered_df[filtered_df['Sales_Category'] == sales_category]
     if import_country != 'All':
         filtered_df = filtered_df[filtered_df['Imported From (Country Name)'] == import_country]
     if destination_country != 'All':
@@ -897,19 +863,7 @@ def apply_filters(df, manufacturer, brand, model, hp_segment, price_category, sa
     if month != 'All':
         filtered_df = filtered_df[filtered_df['Month'] == month]
     
-    # Apply range filters
-    if price_range:
-        filtered_df = filtered_df[
-            (filtered_df['Price_Min'] >= price_range[0]) & 
-            (filtered_df['Price_Max'] <= price_range[1])
-        ]
-    if sales_range:
-        filtered_df = filtered_df[
-            (filtered_df['Sales_Min'] >= sales_range[0]) & 
-            (filtered_df['Sales_Max'] <= sales_range[1])
-        ]
-    
     return filtered_df
 
 if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 8051)))
+    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 8055)))
